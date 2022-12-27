@@ -280,6 +280,7 @@ def main():
             cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
         )
+        # 在这里生成相应任务下面的数据集此处经过修改，把数据集改成我们的数据集
         import pdb;pdb.set_trace()
     elif data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
@@ -377,6 +378,7 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
+    import pdb;pdb.set_trace()
 
     # Preprocessing the raw_datasets
     if data_args.task_name is not None:
@@ -425,6 +427,8 @@ def main():
     elif data_args.task_name is not None and not is_regression:
         model.config.label2id = {l: i for i, l in enumerate(label_list)}
         model.config.id2label = {id: label for label, id in config.label2id.items()}
+
+    import pdb;pdb.set_trace()
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(

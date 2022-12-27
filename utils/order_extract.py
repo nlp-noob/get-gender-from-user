@@ -162,7 +162,7 @@ def get_data(fin, label_list, name_list, byte_name_list):
     an_order = {"pairNO":0,
                 "orderNO":order_no,
                 "order":[],
-                "label":[] if generate_empty_label else label_list[len(orders)]}
+                "label":-1}
     for line in fin:
     
         if not line.strip():
@@ -174,7 +174,7 @@ def get_data(fin, label_list, name_list, byte_name_list):
             an_order = {"pairNO":pair_no,
                         "orderNO":order_no,
                         "order":[],
-                        "label":[] if generate_empty_label else label_list[len(orders)]}
+                        "label":-1}
 
         if pair_line in line:
             pair_no += 1
@@ -184,7 +184,7 @@ def get_data(fin, label_list, name_list, byte_name_list):
             an_order = {"pairNO":pair_no,
                         "orderNO":order_no,
                         "order":[],
-                        "label":[] if generate_empty_label else label_list[len(orders)]}
+                        "label":-1}
             order_no = 0
 
         if catch_text_compile.match(line):
@@ -208,13 +208,6 @@ def get_data(fin, label_list, name_list, byte_name_list):
             an_order["order"][-1][1] += (new_line_symbol+text)
 
     orders.append(an_order)
-
-    # 把label转换成每行一个
-    for order in orders:
-        label_list = order["label"]
-        order["label"] = []
-        for index in range(len(order["order"])):
-            order["label"].append(get_labels_in_line(label_list, index))
             
     return orders
 
