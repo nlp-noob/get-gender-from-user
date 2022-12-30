@@ -20,12 +20,18 @@ import logging
 import os
 import random
 import sys
+import pandas as pd
 from dataclasses import dataclass, field
 from typing import Optional
+from sklearn.metrics import precision_recall_curve, roc_curve
+import sklearn
 
+import copy
+import json
 import datasets
 import numpy as np
 from datasets import load_dataset
+from datasets import Dataset
 
 import evaluate
 import transformers
@@ -203,19 +209,86 @@ class ModelArguments:
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
 
+@dataclass
+class CustomerArguments:
+    my_train_file: str = field(
+        metadata={
+                    "help": 
+                    "Path to the taining file from customer."
+                 }
+    )
+    my_validataion_file: str = field(
+        metadata={
+                    "help": 
+                    "Path to the validation file from customer."
+                 }
+    )
+    window_size: int = field(
+        metadata={
+                    "help": 
+                    "the window size of the doc arrange from the conversation."
+                 }
+    )
+    
+
+def _get_my_dataset_split(json_data, window_size):
+    input_dict = {"sentence": [] , "label": [], "idx":[]}
+    for an_order_index, an_order in enumerate(json_data):
+        for line_index, a_line in enumerate(an_order["order"]):
+            # if is user line
+            if a_line[0]:
+                sentences_list = []
+                for up_index in range(window_size):
+                    now_index = line_index - up_index
+                    if now_index < 0:
+                        break
+                    now_line = copy.deepcopy(an_order["order"][now_index])
+                    character_name = "[USER]" if now_line[0]  else "[ADVISOR]"
+                    a_sentence = " ".join([character_name, now_line[1]])
+                    sentences_list.append(a_sentence)
+                input_dict["sentence"].append(" ".join(sentences_list))
+
+                gender_label = an_order["gender_label_keyword"][line_index]
+                gender_label_keyword_begin_index = an_order["gender_label_keyword_begin_index"][line_index]
+                if gender_label != 2 and gender_label_keyword_begin_index >= now_index:
+                    input_dict["label"].append(gender_label)
+                else:
+                    input_dict["label"].append(2)
+                input_dict["idx"].append(len(input_dict["label"]) - 1)
+    return Dataset.from_pandas(pd.DataFrame({'sentence': input_dict["sentence"], 
+                                             'label': input_dict["label"],
+                                             'idx': input_dict["idx"]}))
+
+
+def get_my_dataset(customer_args):
+    # a split of the dataset features is bellow
+    # ['sentence', 'label', 'idx']
+    dataset_dict = {}
+    # get training data
+    tf = open(customer_args.my_train_file, "r")
+    train_data_json = json.load(tf)
+    tf.close()
+    vf = open(customer_args.my_validataion_file, "r")
+    validation_data_json = json.load(vf)
+    vf.close()
+
+    dataset_dict["train"] = _get_my_dataset_split(train_data_json, customer_args.window_size)
+    dataset_dict["validation"] = _get_my_dataset_split(validation_data_json, customer_args.window_size)
+    return datasets.DatasetDict(dataset_dict)
+    
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments, CustomerArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args, customer_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+        model_args, data_args, training_args, customer_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -274,14 +347,15 @@ def main():
     # download the dataset.
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(
-            "glue",
-            data_args.task_name,
-            cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-        # 在这里生成相应任务下面的数据集此处经过修改，把数据集改成我们的数据集
-        import pdb;pdb.set_trace()
+        #raw_datasets = load_dataset(
+        #    "glue",
+        #    data_args.task_name,
+        #    cache_dir=model_args.cache_dir,
+        #    use_auth_token=True if model_args.use_auth_token else None,
+        #)
+        #import pdb;pdb.set_trace()
+        # change to my dataset
+        raw_datasets = get_my_dataset(customer_args)
     elif data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
@@ -334,7 +408,9 @@ def main():
     if data_args.task_name is not None:
         is_regression = data_args.task_name == "stsb"
         if not is_regression:
-            label_list = raw_datasets["train"].features["label"].names
+            # label_list = raw_datasets["train"].features["label"].names
+            # use my label list
+            label_list = ["female", "male", "unk"]
             num_labels = len(label_list)
         else:
             num_labels = 1
@@ -378,7 +454,7 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
-    import pdb;pdb.set_trace()
+    # import pdb;pdb.set_trace()
 
     # Preprocessing the raw_datasets
     if data_args.task_name is not None:
@@ -428,8 +504,6 @@ def main():
         model.config.label2id = {l: i for i, l in enumerate(label_list)}
         model.config.id2label = {id: label for label, id in config.label2id.items()}
 
-    import pdb;pdb.set_trace()
-
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
@@ -472,13 +546,14 @@ def main():
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
-    if training_args.do_predict or data_args.task_name is not None or data_args.test_file is not None:
-        if "test" not in raw_datasets and "test_matched" not in raw_datasets:
-            raise ValueError("--do_predict requires a test dataset")
-        predict_dataset = raw_datasets["test_matched" if data_args.task_name == "mnli" else "test"]
-        if data_args.max_predict_samples is not None:
-            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
-            predict_dataset = predict_dataset.select(range(max_predict_samples))
+    if training_args.do_predict:
+        if data_args.task_name is not None or data_args.test_file is not None:
+            if "test" not in raw_datasets and "test_matched" not in raw_datasets:
+                raise ValueError("--do_predict requires a test dataset")
+            predict_dataset = raw_datasets["test_matched" if data_args.task_name == "mnli" else "test"]
+            if data_args.max_predict_samples is not None:
+                max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+                predict_dataset = predict_dataset.select(range(max_predict_samples))
 
     # Log a few random samples from the training set:
     if training_args.do_train:
@@ -491,15 +566,70 @@ def main():
     else:
         metric = evaluate.load("accuracy")
 
+
+    def my_PR_AUC(true_labels, probs):
+        pr_auc_dict = {}
+        # ignore the "unk" label
+        for label_id in range(2):
+            true_ids_for_auc = []
+            probs_for_auc = []
+            for a_true, a_prob in zip(true_labels, probs):
+                if a_true == label_id:
+                    true_ids_for_auc.append(1)
+                else:
+                    true_ids_for_auc.append(0)
+                probs_for_auc.append(a_prob[label_id])
+            precision, recall, thresholds = precision_recall_curve(true_ids_for_auc, probs_for_auc, pos_label=1)
+            pr_auc = sklearn.metrics.auc(recall, precision)
+            pr_auc_dict[label_id] = pr_auc
+        return pr_auc_dict
+            
+
+    def my_metrics(pred_labels, true_labels, probs):        
+        metric_dict = {}
+        id2label = {0: "female", 1: "male", 2:"unk"}
+        # init metrics_dict
+        for label_id in range(2):
+            # the unk label is just like the "O" in ner task
+            metric_dict[label_id] = {"TP": 1e-7, "FP":1e-7, "FN":1e-7} # avoid devide zero error 
+            for a_pred, a_true in zip(pred_labels, true_labels): 
+                if a_pred == a_true and a_pred != 2:
+                    metric_dict[label_id]["TP"] += 1
+                elif a_pred != 2 and a_pred != a_true:
+                    metric_dict[label_id]["FP"] += 1
+                elif a_true != 2 and a_pred == 2:
+                    metric_dict[label_id]["FN"] += 1
+        for a_key in list(metric_dict.keys()):
+            TP = metric_dict[a_key]["TP"]
+            FP = metric_dict[a_key]["FP"]
+            FN = metric_dict[a_key]["FN"]
+            metric_dict[a_key]["precision"] = TP/(TP + FP)
+            metric_dict[a_key]["recall"] = TP/(TP + FN)
+            metric_dict[a_key]["F1"] = (2 * metric_dict[a_key]["precision"] * metric_dict[a_key]["recall"])/(metric_dict[a_key]["precision"] + metric_dict[a_key]["recall"])
+        # PR AUC
+        auc_dict = my_PR_AUC(true_labels, probs)
+        for label_id in list(auc_dict.keys()):
+            metric_dict[label_id]["PR_AUC"] = auc_dict[label_id]
+
+        return metric_dict
+        
+
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
+        id2label = {0: "female", 1: "male", 2:"unk"}
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
         if data_args.task_name is not None:
             result = metric.compute(predictions=preds, references=p.label_ids)
-            if len(result) > 1:
-                result["combined_score"] = np.mean(list(result.values())).item()
+            # compute my metrics here
+            my_result = my_metrics(preds, p.label_ids, p.predictions)
+            print(my_result)
+            for a_id in list(my_result.keys()):
+                for a_key in list(my_result[a_id].keys()):
+                    result[id2label[a_id]+"_"+a_key] = my_result[a_id][a_key]
+            # if len(result) > 1:
+            #     result["combined_score"] = np.mean(list(result.values())).item()
             return result
         elif is_regression:
             return {"mse": ((preds - p.label_ids) ** 2).mean().item()}

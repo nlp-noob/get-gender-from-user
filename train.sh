@@ -1,13 +1,15 @@
 python run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --my_train_file data/test_train/train.json \
+  --my_validataion_file data/test_train/valid.json \
+  --model_name_or_path malcolm/REA_GenderIdentification_v1 \
   --task_name sst2 \
   --do_train True \
   --do_eval True \
+  --do_predict False \
   --max_seq_length 128 \
   --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --no_cuda True \
+  --learning_rate 1e-5 \
+  --num_train_epochs 10 \
   --logging_strategy steps \
   --logging_first_step True \
   --logging_steps 10 \
@@ -15,3 +17,9 @@ python run_glue.py \
   --eval_steps 10 \
   --overwrite_output_dir True \
   --output_dir ./tmp/sst2/ \
+  --window_size 10 \
+  --ignore_mismatched_sizes True \
+  --fp16 True \
+  --fp16_opt_level O1 \
+  --lr_scheduler_type cosine \
+  --warmup_ratio 0.20 \

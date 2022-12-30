@@ -1,7 +1,14 @@
+from dataclasses import dataclass, field
+from transformers import (
+        HfArgumentParser,
+)
+
+import random
 import json
 import readline
 import gender_guesser.detector as gender
 import copy
+import sklearn
 
 # This Script is used to generate tagged_data based on keywords and names 
 # the data_structure of the labels is shown bellow:
@@ -15,18 +22,8 @@ import copy
 # {0: "female", 1: "male", 2: "unk"}
 
 # words that indicate that the line maybe contain the gender info
-KEYWORDS_LIST = ["gender", "female", "male", "Gender", "Female", "Male", "girfriend", 
-                 "boyfriend", " bf ", " gf ", " his ", " her ", "His ", "Her ",]
-
-# The path to the tagged person data json file.
-# this data will be used to get the name of the line, and by using the ngender module,
-# the possible gender line is caught
-PER_DATA_PATH = "./data/per_json/dup_fixxedtrain0000_01.json"
-
-# After the process step of the save_every_step bellow,
-# the tagged data is saved to the path
-REALTIME_SAVE_PATH = "./data/per_json/tagged_train0000_01.json"
-save_every_step = 20
+KEYWORDS_LIST = ["gender", "female", "male", "Gender", "Female", "Male", "girlfriend", 
+                 "boyfriend", " bf ", " gf ", " his ", " her ", "His ", "Her ", " ex "]
 
 id2label = {0: "female", 1: "male", 2: "unk"}
 label2id = {"female": 0, "male": 1, "unk": 2}
@@ -39,12 +36,94 @@ warning_reminder_format = "\033[0;31m{}\033[0m"
 ac_reminder_format = "\033[0;32m{}\033[0m" # green
 check_line_reminder_format = "\033[0;32m{}\033[0m" # green
 
-# for human understanding during the tagging process
-SHOW_CONTEXT_SIZE = 10
-
 # gender guesser object
 gender_detector = gender.Detector()
-gender_detector_type_list = ['unknown', 'female', 'male', 'mostly_male', 'mostly_female', 'andy']
+
+@dataclass
+class CustomerArguments:
+    mode: str = field(
+        default=None,
+        metadata={
+                    "help": 
+                    "Specify the mod which you want to deal the data with."
+                    "the avalaible mode list is shown bellow."
+                    "1. {fix_data_manually}: Fix the label of the input data by using keyboard."
+                    "2. {count_data_tags}: Count the tags of the tagged data."
+                 },
+    )
+    input_file_path: str = field(
+        default=None,
+        metadata={
+                    "help": 
+                    "The path to the tagged person data json file."
+                    "this data will be used to get the name of the line, and by using the ngender module."
+                    "the possible gender line is caught"
+                 },
+    )
+    realtime_save_path: str = field(
+        default=None,
+        metadata={
+                    "help": 
+                    "The save path that saving to while tagging."
+                 },
+    )
+    save_every_step: str = field(
+        default=None,
+        metadata={
+                    "help":
+                    "save every step."
+                 },
+    )
+    fix_while_count: bool = field(
+        default=False,
+        metadata={
+                    "help":
+                    "When you choose the data mode of count_data_tags."
+                    "You can specify this choice to decide if you want to fix the data after the process of counting the labels."
+                 },
+    )
+    fix_no_label: bool = field(
+        default=False,
+        metadata={
+                    "help":
+                    "When the --fix_while_data is set to True,"
+                    "This Option decide to fix the no_label_data or not."
+                 },
+    )
+    fix_ambiguous: bool = field(
+        default=False,
+        metadata={
+                    "help":
+                    "When the --fix_while_data is set to True,"
+                    "This Option decide to fix the ambiguous_data or not."
+                 },
+    )
+    split_a_valid_dataset: bool = field(
+        default=False,
+        metadata={
+                    "help":
+                    "Decide to split out a valid dataset or nor."
+                    "Note: A valid dataset is important for evaluation, so it should be tagged strictly in key word and name."
+                 },
+    )
+    valid_dataset_len: int = field(
+        default=None,
+        metadata={
+                    "help":
+                    "If you decide to split a valid dataset, you should specify the length of the valid dataset."
+                 },
+    )
+
+    def __post_init__(self):
+        self.check_mode_list = ["fix_data_manually", "count_data_tags"]
+        if self.mode not in self.check_mode_list:
+            print(ac_reminder_format.format("**"*20))
+            print(warning_reminder_format.format("The available mode:"))
+            print(ac_reminder_format.format("--"*20))
+            for a_mode in self.check_mode_list:
+                print(ac_reminder_format.format(a_mode))
+            print(ac_reminder_format.format("**"*20))
+            raise ValueError("You should choose the one a mode from the list shown above")
 
 
 def init_data(data_to_be_inited):
@@ -151,9 +230,9 @@ def _display_a_check_item(a_data, line_index, display_line):
     # show
     for line in final_doc:
         print(line)
-    
+ 
 
-def fix_data_mannually(data_to_be_fix):
+def fix_data_mannually(data_to_be_fix, args):
     data_to_be_fix = init_data(data_to_be_fix)
     # The list of index for label label
     # [order_index, line_index]
@@ -239,8 +318,8 @@ def fix_data_mannually(data_to_be_fix):
                     fixxed_data[data_index]["gender_label_keyword_begin_index"][line_index] = input_line_index
                     break
 
-        if process_index % save_every_step == 0:
-            fout = open(REALTIME_SAVE_PATH, "w") 
+        if process_index % args.save_every_step == 0:
+            fout = open(args.realtime_save_path, "w") 
             json_str = json.dumps(fixxed_data, indent=2)
             fout.write(json_str)
             fout.close()
@@ -289,26 +368,143 @@ def fix_data_mannually(data_to_be_fix):
                 else:
                     fixxed_data[data_index][name_label_key][line_index] = input_id
                     break
-        if process_index % save_every_step == 0:
-            fout = open(REALTIME_SAVE_PATH, "w") 
+        if process_index % args.save_every_step == 0:
+            fout = open(args.realtime_save_path, "w") 
             json_str = json.dumps(fixxed_data, indent=2)
             fout.write(json_str)
             fout.close()
             print(ac_reminder_format.format("Write Success"))
 
-    fout = open(REALTIME_SAVE_PATH, "w") 
+    fout = open(args.realtime_save_path, "w") 
     json_str = json.dumps(fixxed_data, indent=2)
     fout.write(json_str)
     fout.close()
     print(ac_reminder_format.format("Write Success"))
 
 
-def main():
-    fper = open(PER_DATA_PATH, "r")
-    per_data = json.load(fper)
-    fper.close()
-    fix_data_mannually(per_data)
+def fix_an_order_for_valid_data(order):
     pass
+
+
+def count_data_tags(args):
+    out_put_path = args.realtime_save_path
+    fout = open(out_put_path, "r")
+    tagged_data =json.load(fout)
+
+    # keyword label statistic(len) sumary
+    len_doc_keyword = {}
+
+    # orders category
+    only_keyword_orders = []
+    only_name_orders = []
+    name_and_keyword_orders = []
+    no_label_orders = []
+
+    # ambiguous orders having the label
+    ambiguous_orders = []
+    
+    for an_order in tagged_data:
+        all_label_in_an_order = []
+        have_name_label_flag = False
+        have_keyword_label_flag = False
+        labels_name_base = an_order["gender_label_name"]
+        labels_keyword_base = an_order["gender_label_keyword"] 
+        labels_keyword_begin_line = an_order["gender_label_keyword_begin_index"]
+
+        # name base
+        for a_label in labels_name_base:
+            if a_label != label2id["unk"]:
+                have_name_label_flag = True
+                # find ambiguous
+                if a_label not in all_label_in_an_order:
+                    all_label_in_an_order.append(a_label)
+
+        # keyword
+        for now_line_index, a_label in enumerate(labels_keyword_base):
+            if a_label != label2id["unk"]:
+                have_keyword_label_flag = True
+                begin_line_index = labels_keyword_begin_line[now_line_index]
+                # find ambiguous
+                if a_label not in all_label_in_an_order:
+                    all_label_in_an_order.append(a_label)
+            
+                # count doc len
+                a_label_doc_len = now_line_index - begin_line_index + 1
+                if a_label_doc_len in list(len_doc_keyword.keys()):
+                    len_doc_keyword[a_label_doc_len]["count"] += 1
+                else:
+                    len_doc_keyword[a_label_doc_len] = {"count": 1, "description": f"the len of the document is {a_label_doc_len}"}
+
+        # category
+        if len(all_label_in_an_order) > 1:
+            ambiguous_orders.append(an_order)
+            continue
+
+        if have_name_label_flag and have_keyword_label_flag:
+            name_and_keyword_orders.append(an_order)
+        elif have_name_label_flag and not have_keyword_label_flag:
+            only_name_orders.append(an_order)
+        elif not have_name_label_flag and have_keyword_label_flag:
+            only_keyword_orders.append(an_order)
+        elif not have_name_label_flag and not have_keyword_label_flag:
+            no_label_orders.append(an_order) 
+
+    # display
+    print(ac_reminder_format.format("**")*20)
+    print(ac_reminder_format.format("The category is shown bellow:"))
+    print(ac_reminder_format.format("There are {}\t ambiguous orders.".format(len(ambiguous_orders))))
+    print(ac_reminder_format.format("There are {}\t name_and_keyword orders.".format(len(name_and_keyword_orders))))
+    print(ac_reminder_format.format("There are {}\t only_keyword orders.".format(len(only_keyword_orders))))
+    print(ac_reminder_format.format("There are {}\t only_name orders.".format(len(only_name_orders))))
+    print(ac_reminder_format.format("There are {}\t no_label orders.".format(len(no_label_orders))))
+    print(ac_reminder_format.format("**")*20)
+    len_keys = list(len_doc_keyword)
+    len_keys.sort()
+    for a_key in len_keys:
+        print(ac_reminder_format.format("--")*20)
+        print(ac_reminder_format.format(len_doc_keyword[a_key]["description"]), end="")
+        print(":\t\t"+ac_reminder_format.format(len_doc_keyword[a_key]["count"]))
+    print(ac_reminder_format.format("**")*20)
+
+    # split data for first training test
+    orders_for_first_test = []
+    orders_for_first_test.extend(only_keyword_orders)
+    orders_for_first_test.extend(only_name_orders)
+    orders_for_first_test.extend(name_and_keyword_orders)
+    print(ac_reminder_format.format("The length of the first training test orders is \t {}".format(len(orders_for_first_test))))
+    print(ac_reminder_format.format("**")*20)
+    valid_dataset_len = 40
+    valid_dataset = orders_for_first_test[:valid_dataset_len]
+    train_dataset = orders_for_first_test[valid_dataset_len:]
+    valid_out_path = "./data/test_train/valid.json"
+    train_out_path = "./data/test_train/train.json"
+    vf = open(valid_out_path, "w")
+    json_str = json.dumps(valid_dataset, indent=2)
+    vf.write(json_str)
+    vf.close()
+    tf = open(train_out_path, "w")
+    json_str = json.dumps(train_dataset, indent=2)
+    tf.write(json_str)
+    tf.close()
+    print(ac_reminder_format.format("Write first test training dataset complete."))
+
+    # fix the data
+    if args.fix_while_count:
+        if args.fix_no_label:
+            pass
+            
+
+
+def main():
+    parser = HfArgumentParser((CustomerArguments))
+    customer_args = parser.parse_args_into_dataclasses()[0]
+    if customer_args.mode == "fix_data_manually":
+        fper = open(customer_args.input_file_path, "r")
+        per_data = json.load(fper)
+        fper.close()
+        fix_data_mannually(per_data, customer_args)
+    elif customer_args.mode == "count_data_tags":
+        count_data_tags(customer_args)
 
 
 if __name__=="__main__":
