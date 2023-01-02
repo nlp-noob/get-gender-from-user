@@ -582,23 +582,47 @@ def main():
             precision, recall, thresholds = precision_recall_curve(true_ids_for_auc, probs_for_auc, pos_label=1)
             pr_auc = sklearn.metrics.auc(recall, precision)
             pr_auc_dict[label_id] = pr_auc
+        # the over_all
+        true_ids_for_auc = []
+        probs_for_auc = []
+        for a_true, a_prob in zip(true_labels, probs):
+            if a_true != 2:
+                true_ids_for_auc.append(1)
+                probs_for_auc.append(a_prob[a_true])
+            else:
+                true_ids_for_auc.append(0)
+                probs_for_auc.append(a_prob[0] + a_prob[1])
+        precision, recall, thresholds = precision_recall_curve(true_ids_for_auc, probs_for_auc, pos_label=1)
+        pr_auc = sklearn.metrics.auc(recall, precision)
+        pr_auc_dict[2] = pr_auc
+
         return pr_auc_dict
             
 
     def my_metrics(pred_labels, true_labels, probs):        
         metric_dict = {}
         id2label = {0: "female", 1: "male", 2:"unk"}
-        # init metrics_dict
+        # init metrics_dict for split label
         for label_id in range(2):
             # the unk label is just like the "O" in ner task
             metric_dict[label_id] = {"TP": 1e-7, "FP":1e-7, "FN":1e-7} # avoid devide zero error 
             for a_pred, a_true in zip(pred_labels, true_labels): 
-                if a_pred == a_true and a_pred != 2:
+                if a_pred == a_true and a_pred != 2 and a_true == label_id:
                     metric_dict[label_id]["TP"] += 1
-                elif a_pred != 2 and a_pred != a_true:
+                elif a_pred != 2 and a_pred != a_true and a_pred == label_id:
                     metric_dict[label_id]["FP"] += 1
-                elif a_true != 2 and a_pred == 2:
+                elif a_true != 2 and a_pred == 2 and a_true == label_id:
                     metric_dict[label_id]["FN"] += 1
+        # init metrics_dict for all
+        metric_dict[2] = {"TP": 1e-7, "FP":1e-7, "FN":1e-7} # avoid devide zero error 
+        for a_pred, a_true in zip(pred_labels, true_labels):
+            if a_pred == a_true and a_pred != 2:
+                metric_dict[2]["TP"] += 1
+            elif a_pred != 2 and a_pred != a_true:
+                metric_dict[2]["FP"] += 1
+            elif a_true != 2 and a_pred == 2:
+                metric_dict[2]["FN"] += 1
+            
         for a_key in list(metric_dict.keys()):
             TP = metric_dict[a_key]["TP"]
             FP = metric_dict[a_key]["FP"]
@@ -617,7 +641,7 @@ def main():
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
-        id2label = {0: "female", 1: "male", 2:"unk"}
+        id2label_tb = {0: "female", 1: "male", 2:"over_all"}
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
         if data_args.task_name is not None:
@@ -627,7 +651,7 @@ def main():
             print(my_result)
             for a_id in list(my_result.keys()):
                 for a_key in list(my_result[a_id].keys()):
-                    result[id2label[a_id]+"_"+a_key] = my_result[a_id][a_key]
+                    result[id2label_tb[a_id]+"_"+a_key] = my_result[a_id][a_key]
             # if len(result) > 1:
             #     result["combined_score"] = np.mean(list(result.values())).item()
             return result

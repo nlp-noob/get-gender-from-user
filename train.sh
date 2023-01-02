@@ -1,7 +1,7 @@
 python run_glue.py \
   --my_train_file data/test_train/train.json \
   --my_validataion_file data/test_train/valid.json \
-  --model_name_or_path malcolm/REA_GenderIdentification_v1 \
+  --model_name_or_path Saulr/distilbert-base-uncased-finetuned-gender-classification \
   --task_name sst2 \
   --do_train True \
   --do_eval True \
@@ -9,7 +9,7 @@ python run_glue.py \
   --max_seq_length 128 \
   --per_device_train_batch_size 32 \
   --learning_rate 1e-5 \
-  --num_train_epochs 10 \
+  --num_train_epochs 5 \
   --logging_strategy steps \
   --logging_first_step True \
   --logging_steps 10 \

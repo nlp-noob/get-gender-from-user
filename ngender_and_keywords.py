@@ -39,6 +39,24 @@ check_line_reminder_format = "\033[0;32m{}\033[0m" # green
 # gender guesser object
 gender_detector = gender.Detector()
 
+# the util class for tagging the empty data
+class DataTagger():
+    def __init__(self, display_lines, label2id=label2id):
+        self.display_lines = display_lines
+        self.label2id = label2id
+        self.result = None
+
+    def display_doc(self)
+        for a_line in self.display_lines:
+            print(a_line)
+
+    def tag(self):
+        while(True):
+            self.display_doc()
+            print(ac_reminder_format.format("**"*20))
+            print(ac_reminder_format.format("**"*20))
+        
+
 @dataclass
 class CustomerArguments:
     mode: str = field(
@@ -389,9 +407,27 @@ def fix_data_mannually(data_to_be_fix, args):
     print(ac_reminder_format.format("Write Success"))
 
 
-def fix_an_order_for_valid_data(order):
-    pass
+def hl_keywords_in_line(line):
+    new_line = line
+    for keyword in KEYWORDS_LIST:
+        if keyword in new_line:
+            splitted_line_words = new_line.split(keyword)
+            new_line = hl_format.format(keyword).join(splitted_line_words)
+    return new_line
 
+
+def fix_data_perfectly(a_data):    
+    display_lines_list = []
+    for a_line_index, a_line in enumerate(a_data["order"]):
+        display_line_text = hl_keywords_in_line(a_line[1])
+        character_name = "[USER]" if a_line[0] else "[ADVI]"
+        display_lines_list.append(str(a_line_index) + "\t" + character_name + "\t" + display_line_text)
+        
+
+    # fix process
+    import pdb;pdb.set_trace()
+    
+    
 
 def count_data_tags(args):
     out_put_path = args.realtime_save_path
@@ -442,11 +478,10 @@ def count_data_tags(args):
                 else:
                     len_doc_keyword[a_label_doc_len] = {"count": 1, "description": f"the len of the document is {a_label_doc_len}"}
 
-        # category
+        # category(no duplicate data)
         if len(all_label_in_an_order) > 1:
             ambiguous_orders.append(an_order)
             continue
-
         if have_name_label_flag and have_keyword_label_flag:
             name_and_keyword_orders.append(an_order)
         elif have_name_label_flag and not have_keyword_label_flag:
@@ -474,6 +509,7 @@ def count_data_tags(args):
     print(ac_reminder_format.format("**")*20)
 
     # split data for first training test
+    # to choose the model for pre-train
     orders_for_first_test = []
     orders_for_first_test.extend(only_keyword_orders)
     orders_for_first_test.extend(only_name_orders)
@@ -496,10 +532,16 @@ def count_data_tags(args):
     print(ac_reminder_format.format("Write first test training dataset complete."))
 
     # fix the data
+    # order keys list
+    # ['pairNO', 'orderNO', 'order', 'label', 'gender_label_name', 'gender_label_keyword', 'gender_label_keyword_begin_index']
     if args.fix_while_count:
+    
         if args.fix_no_label:
-            pass
-            
+            # fix the data without any label
+            for a_data in no_label_orders:
+                fix_data_perfectly(copy.deepcopy(a_data))
+                for a_line_index, a_line in enumerate(a_data["order"]):
+                    pass
 
 
 def main():
