@@ -106,6 +106,13 @@ class CustomerArguments:
                     "Note: A valid dataset is important for evaluation, so it should be tagged strictly in key word and name."
                  },
     )
+    splitte_data_path: str = field(
+        default=False,
+        metadata={
+                    "help":
+                    "the path that save the splitted data."
+                 },
+    )
     valid_dataset_len: int = field(
         default=None,
         metadata={
