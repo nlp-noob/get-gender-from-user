@@ -26,3 +26,7 @@ eval_female_PR_AUC      =     0.8131
 eval_male_PR_AUC        =     0.1294
 eval_over_all_PR_AUC    =     0.8697
 
+Maha/OGBV-gender-indicbert-ta-hasoc21_codemix
+eval_female_PR_AUC      =     0.5976
+eval_male_PR_AUC        =     0.0898
+eval_over_all_PR_AUC    =     0.8772

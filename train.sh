@@ -23,3 +23,5 @@ python run_glue.py \
   --fp16_opt_level O1 \
   --lr_scheduler_type cosine \
   --warmup_ratio 0.20 \
+  --save_strategy epoch \
+  --save_steps 1 \

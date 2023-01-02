@@ -41,20 +41,55 @@ gender_detector = gender.Detector()
 
 # the util class for tagging the empty data
 class DataTagger():
-    def __init__(self, display_lines, label2id=label2id):
+    def __init__(self, display_lines, a_data, mode="fix_empty" label2id=label2id):
         self.display_lines = display_lines
         self.label2id = label2id
-        self.result = None
+        self.result_labels = [] 
+        self.a_data = copy.deepcopy(a_data)
 
-    def display_doc(self)
+    def _display_doc(self):
         for a_line in self.display_lines:
             print(a_line)
 
+    def _display_the_input_tips(self):
+        print(ac_reminder_format.format("**"*20))
+        print(ac_reminder_format.format("Please input str for command:"))
+        print("1.\"finish\":\tThis command means you have already tagged all label in a_data.")
+        print(ac_reminder_format.format("Please input int for tagging:"))
+        print("The process will tell you what to do")
+        print(ac_reminder_format.format("**"*20))
+
+    def _display_the_error_input_tips(self):
+        print(warning_reminder_format.format("--"*20))
+        print(warning_reminder_format.format("Wrong input!!!!!"))
+        print(warning_reminder_format.format("--"*20))
+        self._display_the_input_tips()
+        input("Press ENTER to re-input")
+
+    def _choose_the_up_index(self, part_lines):
+        
+
     def tag(self):
         while(True):
-            self.display_doc()
-            print(ac_reminder_format.format("**"*20))
-            print(ac_reminder_format.format("**"*20))
+            self._display_doc()
+            self._display_the_input_tips()
+            usr_input = input("Please input the first label index you wanna tag.")
+            if user_input.isdigit():
+                input_first_line_index = int(usr_input)
+                if input_first_line_index >= len(self.display_lines) or input_first_line_index < 0:
+                    self._display_the_error_input_tips()
+                else:
+                    part_lines = self.display_lines[:input_first_line_index + 1]
+                    _choose_the_up_index(part_lines)
+
+
+            elif user_input.isalpha():
+                if user_input == "finish":
+                    print("Finish tagging a_data.")
+                else:
+                    self._display_the_error_input_tips()
+            else:
+                self._display_the_error_input_tips()
         
 
 @dataclass
@@ -422,11 +457,9 @@ def fix_data_perfectly(a_data):
         display_line_text = hl_keywords_in_line(a_line[1])
         character_name = "[USER]" if a_line[0] else "[ADVI]"
         display_lines_list.append(str(a_line_index) + "\t" + character_name + "\t" + display_line_text)
-        
-
     # fix process
-    import pdb;pdb.set_trace()
-    
+    data_tagger = DataTagger(display_lines_list, a_data)
+    data_tagger
     
 
 def count_data_tags(args):
@@ -535,13 +568,10 @@ def count_data_tags(args):
     # order keys list
     # ['pairNO', 'orderNO', 'order', 'label', 'gender_label_name', 'gender_label_keyword', 'gender_label_keyword_begin_index']
     if args.fix_while_count:
-    
         if args.fix_no_label:
             # fix the data without any label
             for a_data in no_label_orders:
                 fix_data_perfectly(copy.deepcopy(a_data))
-                for a_line_index, a_line in enumerate(a_data["order"]):
-                    pass
 
 
 def main():
