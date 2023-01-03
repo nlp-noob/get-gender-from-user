@@ -41,7 +41,7 @@ gender_detector = gender.Detector()
 
 # the util class for tagging the empty data
 class DataTagger():
-    def __init__(self, display_lines, a_data, mode="fix_empty" label2id=label2id):
+    def __init__(self, display_lines, a_data, mode="fix_empty", label2id=label2id):
         self.display_lines = display_lines
         self.label2id = label2id
         self.result_labels = [] 
@@ -67,6 +67,7 @@ class DataTagger():
         input("Press ENTER to re-input")
 
     def _choose_the_up_index(self, part_lines):
+        pass
         
 
     def tag(self):
@@ -159,11 +160,18 @@ class CustomerArguments:
                     "Note: A valid dataset is important for evaluation, so it should be tagged strictly in key word and name."
                  },
     )
-    splitte_data_path: str = field(
-        default=False,
+    splitted_data_path: str = field(
+        default=None,
         metadata={
                     "help":
                     "the path that save the splitted data."
+                 },
+    )
+    save_splitted_data: bool = field(
+        default=False,
+        metadata={
+                    "help":
+                    "Decide whether to save the splitted data or not."
                  },
     )
     valid_dataset_len: int = field(
@@ -459,8 +467,29 @@ def fix_data_perfectly(a_data):
         display_lines_list.append(str(a_line_index) + "\t" + character_name + "\t" + display_line_text)
     # fix process
     data_tagger = DataTagger(display_lines_list, a_data)
-    data_tagger
     
+
+def _save_a_splitted_data(out_path, a_data):
+    fout = open(out_path, "w")
+    json_str = json.dumps(a_data, indent=2)
+    fout.write(json_str)
+    fout.close()
+
+
+def save_splitted_data(
+                       data_path,
+                       only_keyword_orders, 
+                       only_name_orders, 
+                       name_and_keyword_orders, 
+                       no_label_orders, 
+                       ambiguous_orders,
+                      ):
+    _save_a_splitted_data(data_path + "only_keyword_orders.json", only_keyword_orders)
+    _save_a_splitted_data(data_path + "only_name_orders.json", only_name_orders)
+    _save_a_splitted_data(data_path + "name_and_keyword_orders.json", name_and_keyword_orders)
+    _save_a_splitted_data(data_path + "no_label_orders.json", no_label_orders)
+    _save_a_splitted_data(data_path + "ambiguous_orders.json", ambiguous_orders)
+
 
 def count_data_tags(args):
     out_put_path = args.realtime_save_path
@@ -523,6 +552,17 @@ def count_data_tags(args):
             only_keyword_orders.append(an_order)
         elif not have_name_label_flag and not have_keyword_label_flag:
             no_label_orders.append(an_order) 
+
+    # save splitted data
+    if args.save_splitted_data:
+        save_splitted_data(
+                       args.splitted_data_path,
+                       only_keyword_orders, 
+                       only_name_orders, 
+                       name_and_keyword_orders, 
+                       no_label_orders, 
+                       ambiguous_orders,
+                      )
 
     # display
     print(ac_reminder_format.format("**")*20)
