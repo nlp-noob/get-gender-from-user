@@ -5,4 +5,9 @@ python pretag.py \
     --num_labels 3 \
     --max_line_num 20 \
     --device "cuda" \
+    --save_label_after_pretag True \
+    --use_exist_label True \
+    --save_label_path "data/splitted_data/labels_of_no_label_orders.json" \
+    --check_the_tagged_order True \
+    --check_the_empty_order True \
 

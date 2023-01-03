@@ -51,6 +51,42 @@ class CustomerArguments:
                     "Path to the data to be pretagged for further training."
                  }
     )
+    save_label_after_pretag: bool = field(
+        default=False,
+        metadata={
+                    "help": 
+                    "Decide to save the pretag label after the pretagging process or not."
+                    "The path is depend on the path of the origin data."
+                 }
+    )
+    use_exist_label: bool = field(
+        default=False,
+        metadata={
+                    "help": 
+                    "Decide to use the saved label or not."
+                 }
+    )
+    save_label_path: str = field(
+        default=None,
+        metadata={
+                    "help": 
+                    "The path of the saved label."
+                 }
+    )
+    check_the_tagged_order: bool = field(
+        default=False,
+        metadata={
+                    "help": 
+                    "Decide to check the tagged data or not after the pretagging process."
+                 }
+    )
+    check_the_empty_order: bool = field(
+        default=False,
+        metadata={
+                    "help": 
+                    "Decide to check the tagged data or not after the pretagging process."
+                 }
+    )
 
 
 class PreTagger():
@@ -74,6 +110,9 @@ class PreTagger():
         self.origin_data = None
         self.a_data_input = {}
         self.a_data_label = {}
+        self.all_labels = {}
+        # the order index that have label after pretagging process
+        self.order_index_with_label = []
 
     def _init_a_data_input(self, order_index):
         # a_data_input is just a dict for a specific order
@@ -118,14 +157,43 @@ class PreTagger():
             text_list.append(line_text)
         return " ".join(text_list)
         
-    def _sumarize_for_pretag(self)
+    def _check_illegal(self):
+        # find out the label with error
+        for a_key in list(self.all_labels.keys()):
+            for line_key in list(self.all_labels[a_key].keys()):
+                if int(line_key) > len(self.origin_data[a_key]["order"]):
+                    raise ValueError("Something went wrong in the tagging process, please check it.")
 
-    def pretag(self):
-        data_path = self.args.data_to_be_pretagged
-        fin = open(data_path, "r")
-        self.origin_data = json.load(fin) 
-        self.tagged_data = copy.deepcopy(self.origin_data)
-        fin.close()
+    def _sumarize_for_pretag(self):
+        # make a summary for the all_label
+        # do the category at the same time
+        all_label_counter = {0: 0, 1: 0, 2: 0, 3: 0}
+        order_indexs_have_label = []
+        for an_order_key in list(self.all_labels.keys()):
+            an_order_label = self.all_labels[an_order_key]
+            for line_index in list(an_order_label.keys()):
+                # test for display
+                if 0 in an_order_label[line_index] or 1 in an_order_label[line_index]:
+                    # have label
+                    if an_order_key not in order_indexs_have_label:
+                        order_indexs_have_label.append(an_order_key)
+                for a_label in an_order_label[line_index]:
+                    all_label_counter[a_label] += 1
+        self.order_index_with_label = order_indexs_have_label
+        print("**"*20)
+        print("Here is the sammary of the all labels")
+        print(all_label_counter)
+        print("0-{female}")
+        print("1-{male}")
+        print("2-{unk}")
+        print("3-{out of max sequence length}")
+        print("this number is for all windowsize input.")
+        print("It means that there must be some duplicated line.")
+        print("**"*20)
+        print("There are {}/{} order have label".format(len(order_indexs_have_label), len(self.origin_data)))
+        print("**"*20)
+
+    def _get_pretag_label_with_model(self):
         for an_order_index, an_order in enumerate(self.origin_data):
             print("Processing order:\t{}/{}".format(an_order_index, len(self.origin_data)))
             self._init_a_data_input(an_order_index)
@@ -141,13 +209,75 @@ class PreTagger():
                         break
                     with torch.no_grad():
                         logits = self.model(**tokenized_sentence).logits
-                        label_to_tag = logits.argmax(-1)
+                        label_to_tag = logits.argmax(-1).item()
                         self.a_data_label[line_index][a_doc_line_list_index] = label_to_tag
+            # Here the one order pretagging process is done
+            self.all_labels[an_order_index] = copy.deepcopy(self.a_data_label)
+        # save the pretag label
+        if self.args.save_label_after_pretag:
+            save_path_words = self.args.data_to_be_pretagged.split("/")
+            save_path_words[-1] = "labels_of_" + save_path_words[-1]
+            save_path = "/".join(save_path_words)
+            fout = open(save_path, "w")
+            json_str = json.dumps(self.all_labels, indent=2)
+            fout.write(json_str)
+            fout.close()
+            print("The label is written to the path {}".format(save_path))
+
+    def _get_pretag_label_with_file(self):
+        label_file_path = self.args.save_label_path
+        fin = open(label_file_path, "r")
+        # convert str keys to int 
+        tmp_all_labels = json.load(fin)
+        for order_key in list(tmp_all_labels.keys()):
+            self.all_labels[int(order_key)] = {}
+            for line_key in list(tmp_all_labels[order_key].keys()):
+                self.all_labels[int(order_key)][int(line_key)] = tmp_all_labels[order_key][line_key]
+        fin.close()
+
+    def _get_order_indexs_to_be_tagged(self, mode):
+        # get the order indexs of the data to be tagged
+        if mode == "tagged":
+            return self.order_index_with_label
+        elif mode == "empty":
+            return_indexs = []
+            for order_index in range(len(self.origin_data)):
+                if order_index not in self.order_index_with_label:
+                    return_indexs.append(order_index)
+            return return_indexs
+
+    def _fix_label(self, mode):
+        order_indexs_for_fixxing = self._get_order_indexs_to_be_tagged(mode)
+        for an_order_index in order_indexs_for_fixxing:
+            an_order = self.origin_data[an_order_index]
+            an_order_label = self.all_labels[an_order_index]
+            # 从pretag中取出来相应的label的逻辑就是
+            # minimum doc_size principle
+        
+        
+        import pdb;pdb.set_trace()
+
+    def pretag(self):
+        data_path = self.args.data_to_be_pretagged
+        fin = open(data_path, "r")
+        self.origin_data = json.load(fin) 
+        self.tagged_data = copy.deepcopy(self.origin_data)
+        fin.close()
+        if not self.args.use_exist_label:
+            self._get_pretag_label_with_model()
+        else:
+            self._get_pretag_label_with_file()
         # Here the pretag process is done
         # A summary is shown to the user here
-
-
-
+        # At the same time, the index of the order with label is saved to self.
+        self._check_illegal()
+        self._sumarize_for_pretag()
+        # check and edit the label manually
+        if self.args.check_the_tagged_order:
+            self._fix_label(mode="tagged")
+        if self.args.check_the_empty_order:
+            self._fix_label(mode="empty")
+            
             
 def main():
     parser = HfArgumentParser((CustomerArguments))
@@ -157,29 +287,7 @@ def main():
     # use pretagger
     pretagger = PreTagger(customer_args)
     pretagger.pretag()
-
-    # test
-    config  = AutoConfig.from_pretrained(
-        "./saved_model/pretag_01/",
-        num_laebels=3,
-        finetuning_task="sst2",
-        cache_dir=None,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        "./saved_model/pretag_01/",
-    )
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "./saved_model/pretag_01/",
-        config=config,
-    ).to(customer_args.device)
-    text = "jfeijfiwefjewfweiwfieiwijieiewiefioewiofji"
-    tokenized_sentence = tokenizer(text, add_special_tokens=True, return_tensors="pt").to(customer_args.device)
-    with torch.no_grad():
-        logits = model(**tokenized_sentence).logits
-        predicted_text_class_id = logits.argmax(-1).item()
     import pdb;pdb.set_trace()
-
-    
     
 
 if __name__ == "__main__":
