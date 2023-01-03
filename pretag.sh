@@ -10,4 +10,5 @@ python pretag.py \
     --save_label_path "data/splitted_data/labels_of_no_label_orders.json" \
     --check_the_tagged_order True \
     --check_the_empty_order True \
+    --save_every_step 20 \
 

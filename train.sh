@@ -17,7 +17,7 @@ python run_glue.py \
   --eval_steps 10 \
   --overwrite_output_dir True \
   --output_dir ./tmp/sst2/ \
-  --window_size 10 \
+  --window_size 2 \
   --ignore_mismatched_sizes True \
   --fp16 True \
   --fp16_opt_level O1 \
